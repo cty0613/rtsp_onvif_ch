@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tt:MetadataStream xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:ttr="https://www.onvif.org/ver20/analytics/radiometry" xmlns:wsnt="http://docs.oasis-open.org/wsn/b-2" xmlns:tns1="http://www.onvif.org/ver10/topics" xmlns:tnssamsung="http://www.samsungcctv.com/2011/event/topics" xmlns:fc="http://www.onvif.org/ver20/analytics/humanface" xmlns:bd="http://www.onvif.org/ver20/analytics/humanbody">
+    <tt:Event>
+        <wsnt:NotificationMessage>
+            <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:Device/tns1:Trigger/tnssamsung:DigitalInput</wsnt:Topic>
+            <wsnt:Message>
+                <tt:Message UtcTime="2025-07-16T07:17:00.148Z" PropertyOperation="Changed">
+                    <tt:Source>
+                        <tt:SimpleItem Name="Index" Value="0"/>
+                        <tt:SimpleItem Name="AlarmInID" Value="1"/>
+                    </tt:Source>
+                    <tt:Data>
+                        <tt:SimpleItem Name="Level" Value="false"/>
+                    </tt:Data>
+                </tt:Message>
+            </wsnt:Message>
+        </wsnt:NotificationMessage>
+        <wsnt:NotificationMessage>
+            <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:VideoSource/ImageTooBlurry/ImagingService</wsnt:Topic>
+            <wsnt:Message>
+                <tt:Message UtcTime="2025-07-16T07:17:00.148Z" PropertyOperation="Changed">
+                    <tt:Source>
+                        <tt:SimpleItem Name="VideoSourceToken" Value="VideoSourceToken-0"/>
+                    </tt:Source>
+                        <tt:Data>
+                            <tt:SimpleItem Name="state" Value="false"/>
+                        </tt:Data>
+                </tt:Message>
+            </wsnt:Message>
+        </wsnt:NotificationMessage>
+        <wsnt:NotificationMessage>
+            <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:VideoAnalytics/tnssamsung:MotionDetection</wsnt:Topic>
+            <wsnt:Message>
+                <tt:Message UtcTime="2025-07-14T04:49:15.002Z" PropertyOperation="Initialized">
+                    <tt:Source>
+                        <tt:SimpleItem Name="VideoSource" Value="VideoSourceToken-0"/>
+                    </tt:Source>
+                    <tt:Data>
+                    </tt:Data>
+                </tt:Message>
+            </wsnt:Message>
+        </wsnt:NotificationMessage>
+        <wsnt:NotificationMessage>
+            <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:VideoSource/MotionAlarm</wsnt:Topic>
+            <wsnt:Message>
+                <tt:Message UtcTime="2025-07-14T04:49:15.002Z" PropertyOperation="Initialized">
+                    <tt:Source>
+                        <tt:SimpleItem Name="Source" Value="VideoSourceToken-0"/>
+                    </tt:Source>
+                    <tt:Data>
+                        <tt:SimpleItem Name="State" Value="false"/>
+                    </tt:Data>
+                </tt:Message>
+            </wsnt:Message>
+        </wsnt:NotificationMessage>
+        <wsnt:NotificationMessage>
+            <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:AudioSource/tnssamsung:AudioDetection</wsnt:Topic>
+                <wsnt:Message>
+                    <tt:Message UtcTime="2025-07-16T07:17:00.148Z" PropertyOperation="Changed">
+                        <tt:Source>
+                            <tt:SimpleItem Name="AudioSourceToken" Value="AudioSource-0"/>
+                        </tt:Source>
+                        <tt:Data>
+                            <tt:SimpleItem Name="Audio" Value="false"/>
+                            <tt:SimpleItem Name="State" Value="false"/>
+                        </tt:Data>
+                    </tt:Message>
+                </wsnt:Message>
+        </wsnt:NotificationMessage>
+        <wsnt:NotificationMessage>
+        <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:Device/tns1:Trigger/tns1:Relay</wsnt:Topic>
+        <wsnt:Message><tt:Message UtcTime="2025-07-14T04:49:15.002Z" PropertyOperation="Initialized">
+        <tt:Source>
+        <tt:SimpleItem Name="RelayToken" Value="Relay-1"/>
+        </tt:Source><tt:Data><tt:SimpleItem Name="LogicalState" Value="inactive"/>
+        </tt:Data>
+        </tt:Message>
+        </wsnt:Message>
+        </wsnt:NotificationMessage>
+        <wsnt:NotificationMessage>
+        <wsnt:Topic Dialect="http://www.onvif.org/ver10/tev/topicExpression/ConcreteSet">tns1:VideoSource/tnssamsung:DigitalAutoTracking</wsnt:Topic>
+        <wsnt:Message>
+        <tt:Message UtcTime="2025-07-16T07:17:14.382Z" PropertyOperation="Changed">
+        <tt:Source>
+        <tt:SimpleItem Name="MediaProfileToken" Value="digital_auto_tracking_token"/>
+        </tt:Source>
+        <tt:Data>
+        <tt:SimpleItem Name="State" Value="false"/>
+        </tt:Data>
+        </tt:Message>
+        </wsnt:Message>
+        </wsnt:NotificationMessage>
+        </tt:Event>
+</tt:MetadataStream
