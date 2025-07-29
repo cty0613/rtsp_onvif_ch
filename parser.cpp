@@ -17,6 +17,7 @@ std::vector<Object> MetadataParser::extractObj(XMLElement* root) {
         const char* objectId = obj->Attribute("ObjectId");
         if (!objectId) continue;
 
+        const char* Lp = "LicensePlate";
         Object objItem;
         objItem.typeName = "Unknown";
         objItem.objectId = std::stoi(objectId);
@@ -46,9 +47,12 @@ std::vector<Object> MetadataParser::extractObj(XMLElement* root) {
             if (classElem) {
                 XMLElement* type = classElem->FirstChildElement("tt:Type");
                 if (type) {
-                    objItem.typeName = type->GetText() ? type->GetText() : "Unknown";
-                    type->QueryDoubleAttribute("Likelihood", &objItem.confidence);
-                    objItems.push_back(objItem);
+                    // Only process LicensePlate type objects
+                    if (strcmp(type->GetText(), Lp) == 0) {
+                        objItem.typeName = type->GetText();
+                        type->QueryDoubleAttribute("Likelihood", &objItem.confidence);
+                        objItems.push_back(objItem);
+                    }
                 }
             }
         }
