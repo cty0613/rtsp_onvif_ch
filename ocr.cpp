@@ -1,4 +1,7 @@
 #include "ocr.hpp"
+#include <algorithm>
+#include <numeric>
+#include <cmath>
 
 void TFOCR::save(const cv::Mat& img, const std::string& filename) {
     std::string full_path = preprocess_dir + "/" + filename;
@@ -136,6 +139,43 @@ std::vector<int> TFOCR::ctcGreedyDecoder(const float* logits, int time, int clas
     return result;
 }
 
+float TFOCR::getConfidence(const float* logits, int time, int classes, const std::string& mode) {
+    std::vector<float> confidences;
+    int blank = 0; // blank token index
+    
+    for (int t = 0; t < time; ++t) {
+        // Find max index and value for this timestep
+        int max_index = 0;
+        float max_val = logits[t * classes];
+        for (int c = 1; c < classes; ++c) {
+            float val = logits[t * classes + c];
+            if (val > max_val) {
+                max_val = val;
+                max_index = c;
+            }
+        }
+        
+        // Skip blank tokens
+        if (max_index == blank) continue;
+        
+        // Apply exponential (assuming logits are log probabilities)
+        float confidence = std::exp(max_val);
+        confidences.push_back(confidence);
+    }
+    
+    if (confidences.empty()) {
+        return 0.0f;
+    }
+    
+    if (mode == "min") {
+        return *std::min_element(confidences.begin(), confidences.end());
+    } else {
+        // mean mode
+        float sum = std::accumulate(confidences.begin(), confidences.end(), 0.0f);
+        return sum / confidences.size();
+    }
+}
+
 void TFOCR::load_ocr(const std::string& model_path, const std::string& labels_path) {
     // Load label map
     label_map = loadLabelMap(labels_path);
@@ -148,7 +188,34 @@ void TFOCR::load_ocr(const std::string& model_path, const std::string& labels_pa
     interpreter->AllocateTensors();
 }
 
-std::string TFOCR::run_ocr(const cv::Mat& input_img) {
+std::string TFOCR::removeRegionalName(const std::string& text) {
+    if (text.length() < 6) { // Need at least 2 Korean characters (6 bytes in UTF-8)
+        return text;
+    }
+    
+    // List of Korean regional names (2 characters each in UTF-8)
+    std::vector<std::string> regional_names = {
+        "서울", "부산", "대구", "인천", "광주", "대전", "울산", 
+        "세종", "경기", "강원", "충북", "충남", "전북", "전남", 
+        "경북", "경남", "제주"
+    };
+    
+    // Extract first 6 bytes (2 Korean characters)
+    std::string first_two_chars = text.substr(0, 6);
+    
+    // Check if it matches any regional name
+    for (const auto& region : regional_names) {
+        if (first_two_chars == region) {
+            // Remove the regional name and return the rest
+            return text.substr(6);
+        }
+    }
+    
+    // If no regional name found, return original text
+    return text;
+}
+
+TFOCR::OCRResult TFOCR::run_ocr(const cv::Mat& input_img) {
 
     cv::Mat gray = preprocess_plate(input_img, 0); // Preprocess the input image
     cv::cvtColor(input_img, gray, cv::COLOR_BGR2GRAY);
@@ -163,7 +230,7 @@ std::string TFOCR::run_ocr(const cv::Mat& input_img) {
     // Run inference
     if (interpreter->Invoke() != kTfLiteOk) {
         std::cerr << "ocr inference failed..." << std::endl;
-        return "";
+        return {"", 0.0f};
     }
 
     // Decode output
@@ -182,5 +249,20 @@ std::string TFOCR::run_ocr(const cv::Mat& input_img) {
         }
     }
 
-    return result;
+    // Remove regional name if present
+    result = removeRegionalName(result);
+
+
+    // Calculate confidence
+    float confidence = getConfidence(output_data, time, classes, "min");
+    confidence = std::round(confidence * 10000.0f) / 10000.0f; // Round to 4 decimal places
+
+    // Return empty result if confidence is too low
+    if (confidence < min_confidence_threshold) {
+        // std::cout << "[OCR] Low confidence (" << confidence << " < " << min_confidence_threshold 
+                //   << "), returning empty result" << std::endl;
+        return {"", 0.0f};
+    }
+
+    return {result, confidence};
 }

@@ -316,17 +316,30 @@ void render_metadata_overlay(SDL_Renderer* renderer, const MetadataResult& metad
     }
 }
 
-std::vector<cv::Mat> render_metadata_crop_to_cv(AVFrame* frame, const MetadataResult& metadata, int width, int height) {
+std::vector<cv::Mat> render_metadata_crop_to_cv(AVFrame* frame, const MetadataResult& metadata, int width, int height, cv::Point2f reference_point = cv::Point2f(-1, -1)) {
     std::vector<cv::Mat> cropped_frames;
     
     if (metadata.objects.empty() || !frame) {
         return cropped_frames;
     }
     
+    // If reference point is not provided, use center of screen as default
+    if (reference_point.x < 0 || reference_point.y < 0) {
+        reference_point = cv::Point2f(width / 2.0f, height / 2.0f);
+    }
+    
     // Convert AVFrame (YUV420P) to OpenCV Mat (BGR)
     cv::Mat yuv_mat(height + height/2, width, CV_8UC1, frame->data[0]);
     cv::Mat bgr_mat;
     cv::cvtColor(yuv_mat, bgr_mat, cv::COLOR_YUV2BGR_I420);
+    
+    // Structure to hold cropped frame and its distance
+    struct CroppedFrameWithDistance {
+        cv::Mat frame;
+        float distance;
+    };
+    
+    std::vector<CroppedFrameWithDistance> frames_with_distance;
     
     for (const auto& obj : metadata.objects) {
         // Convert normalized coordinates to pixel coordinates
@@ -356,10 +369,29 @@ std::vector<cv::Mat> render_metadata_crop_to_cv(AVFrame* frame, const MetadataRe
             // Create ROI (Region of Interest) and crop
             cv::Rect crop_rect(x1, y1, crop_width, crop_height);
             cv::Mat cropped_frame = bgr_mat(crop_rect).clone();
-            cropped_frames.push_back(cropped_frame);
+            
+            // Calculate center of gravity in pixel coordinates
+            cv::Point2f center_of_gravity(obj.centerOfGravity.x * width, obj.centerOfGravity.y * height);
+            
+            // Calculate distance from reference point to center of gravity
+            float distance = cv::norm(reference_point - center_of_gravity);
+            
+            // Store frame with its distance
+            frames_with_distance.push_back({cropped_frame, distance});
         } else {
             std::cout << "[RENDER] Invalid crop dimensions: " << crop_width << "x" << crop_height << std::endl;
         }
+    }
+    
+    // Sort by distance (closest first)
+    std::sort(frames_with_distance.begin(), frames_with_distance.end(),
+              [](const CroppedFrameWithDistance& a, const CroppedFrameWithDistance& b) {
+                  return a.distance < b.distance;
+              });
+    
+    // Extract sorted frames
+    for (const auto& frame_with_dist : frames_with_distance) {
+        cropped_frames.push_back(frame_with_dist.frame);
     }
     
     return cropped_frames;
@@ -406,13 +438,14 @@ void render_thread(AVFormatContext* formatContext, int video_stream_index) {
     
     // Frame timing variables (similar to ffplay)
     double frame_timer = av_gettime_relative() / 1000000.0;
-    double frame_last_delay = 0.03; // 25fps default
+    double frame_last_delay = 0.02; // 25fps default
     const double AV_SYNC_THRESHOLD_MIN = 0.04;
     const double AV_SYNC_THRESHOLD_MAX = 0.1;
     const double AV_SYNC_FRAMEDUP_THRESHOLD = 0.1;
     
     // Metadata sync buffer
     std::vector<MetadataResult> metadata_buffer;
+    cv::Point2f custom_point(width * 0.5f, height * 1.0f); // N% from left, M% from top
     
     while (run_threads) {
         SDL_Event event;
@@ -498,10 +531,10 @@ void render_thread(AVFormatContext* formatContext, int video_stream_index) {
             // Render frame and metadata
             render_frame_to_sdl(renderer, texture, frame);
             if (metadata_found) {
-                render_metadata_overlay(renderer, current_metadata, width, height);
+                // render_metadata_overlay(renderer, current_metadata, width, height);
 
                 // Get cropped frames from metadata bounding boxes
-                std::vector<cv::Mat> cropped_frames = render_metadata_crop_to_cv(frame, current_metadata, width, height);
+                std::vector<cv::Mat> cropped_frames = render_metadata_crop_to_cv(frame, current_metadata, width, height, custom_point);
                 cropped_frame_queue.push(cropped_frames); // Vector is already copied by value
             }
             
@@ -558,15 +591,20 @@ void ocr_thread() {
         if (cropped_frame_queue.try_pop(cropped_frames)) {
             if (!cropped_frames.empty()) {
                 for (const auto& cropped_frame : cropped_frames) {
-                    std::string lp_number = ocrProcessor.run_ocr(cropped_frame);
-                    std::cout << "[OCR] Detected license plate: " << lp_number << std::endl;
-                    ocr_results.push_back(lp_number);
+                    TFOCR::OCRResult result = ocrProcessor.run_ocr(cropped_frame);
+                    if (result.label.empty()) {
+                        // std::cout << "[OCR] Low confidence or empty label, skipping" << std::endl;
+                        continue;
+                    }
+                    // Check if the result already exists in ocr_results (no duplicates allowed)
+                    if (std::find(ocr_results.begin(), ocr_results.end(), result.label) == ocr_results.end()) {
+                        std::cout << "[OCR] Detected license plate: " << result.label << " conf : " << result.confidence << std::endl;
+                        ocr_results.push_back(result.label);
+                    } else {
+                        std::cout << "[OCR] Duplicate license plate skipped: " << result.label << " conf : " << result.confidence << std::endl;
+                    }
                     
                 }
-                
-                // TODO: Add OCR processing here
-                // Example: std::string ocr_result = performOCR(cropped_frame);
-                
                 frame_counter++;
             }
         } else {
@@ -577,11 +615,43 @@ void ocr_thread() {
         // If shared memory is initialized, write results
         if (shm_ptr != nullptr) {
             BusSequence* bus_sequence = static_cast<BusSequence*>(shm_ptr);
-            std::memset(bus_sequence, 0, sizeof(BusSequence)); // initialize to zero
-
-            size_t count = std::min(ocr_results.size(), static_cast<size_t>(MAX_BUSES));
+            
+            // Read existing plates from shared memory
+            std::vector<std::string> existing_plates;
+            for (int i = 0; i < MAX_BUSES; ++i) {
+                if (strlen(bus_sequence->plates[i]) > 0) {
+                    existing_plates.push_back(std::string(bus_sequence->plates[i]));
+                }
+            }
+            
+            // Filter out duplicates from ocr_results that already exist in shared memory
+            std::vector<std::string> new_plates;
+            for (const auto& result : ocr_results) {
+                // Check if this result already exists in shared memory
+                if (std::find(existing_plates.begin(), existing_plates.end(), result) == existing_plates.end()) {
+                    new_plates.push_back(result);
+                } else {
+                    std::cout << "[OCR] Plate already in SHM, skipping: " << result << std::endl;
+                }
+            }
+            
+            // Create final list: keep existing plates and add new unique ones
+            std::vector<std::string> final_plates = existing_plates;
+            for (const auto& new_plate : new_plates) {
+                if (final_plates.size() < MAX_BUSES) {
+                    final_plates.push_back(new_plate);
+                    std::cout << "[OCR] Added new plate to SHM: " << new_plate << std::endl;
+                } else {
+                    std::cout << "[OCR] SHM full, cannot add: " << new_plate << std::endl;
+                    break;
+                }
+            }
+            
+            // Clear and write final results to shared memory
+            std::memset(bus_sequence, 0, sizeof(BusSequence));
+            size_t count = std::min(final_plates.size(), static_cast<size_t>(MAX_BUSES));
             for(size_t i = 0; i < count; ++i) {
-                strncpy(bus_sequence->plates[i], ocr_results[i].c_str(), MAX_PLATE_LENGTH - 1);
+                strncpy(bus_sequence->plates[i], final_plates[i].c_str(), MAX_PLATE_LENGTH - 1);
             }
         }
     }
